@@ -1,0 +1,169 @@
+{
+  "setup_steps": [
+    "1. Go to https://browse.ai and create an account",
+    "2. Click 'Create Robot' and select 'Extract structured data'",
+    "3. Enter the target URL from the examples below",
+    "4. Use the visual selector to identify data fields",
+    "5. Configure the robot settings (frequency, pagination, etc.)",
+    "6. Test the robot with sample URLs",
+    "7. Schedule the robot or use API integration"
+  ],
+  "robots": {
+    "nike_product_scraper": {
+      "name": "Nike Product Scraper",
+      "description": "Scrapes Nike product pages for sneaker images and details",
+      "setup_guide": {
+        "target_sites": [
+          "nike.com"
+        ],
+        "data_fields_to_extract": [
+          {
+            "name": "product_name",
+            "selector": "h1[data-automation-id='product-title']"
+          },
+          {
+            "name": "price",
+            "selector": ".product-price"
+          },
+          {
+            "name": "images",
+            "selector": "img[data-sub-type='product']",
+            "attribute": "src",
+            "multiple": true
+          },
+          {
+            "name": "description",
+            "selector": ".product-description"
+          },
+          {
+            "name": "sku",
+            "selector": "[data-automation-id='product-sku']"
+          },
+          {
+            "name": "colorway",
+            "selector": ".product-subtitle"
+          },
+          {
+            "name": "availability",
+            "selector": ".product-availability"
+          }
+        ],
+        "example_urls": [
+          "https://www.nike.com/t/air-jordan-1-retro-high-og-shoes-Mh1J2e",
+          "https://www.nike.com/t/air-force-1-07-shoes-WrLlWX"
+        ],
+        "recommended_settings": {
+          "run_frequency": "Daily",
+          "max_pages": 1,
+          "wait_time": "2 seconds",
+          "retry_attempts": 3,
+          "output_format": "JSON"
+        }
+      }
+    },
+    "stockx_product_scraper": {
+      "name": "StockX Product Scraper",
+      "description": "Scrapes StockX product pages for sneaker market data",
+      "setup_guide": {
+        "target_sites": [
+          "stockx.com"
+        ],
+        "data_fields_to_extract": [
+          {
+            "name": "product_name",
+            "selector": "h1[data-testid='product-name']"
+          },
+          {
+            "name": "current_price",
+            "selector": "[data-testid='current-price']"
+          },
+          {
+            "name": "images",
+            "selector": "img[data-testid='product-media']",
+            "attribute": "src",
+            "multiple": true
+          },
+          {
+            "name": "last_sale",
+            "selector": "[data-testid='last-sale-price']"
+          },
+          {
+            "name": "price_change",
+            "selector": "[data-testid='price-change']"
+          },
+          {
+            "name": "market_cap",
+            "selector": "[data-testid='market-cap']"
+          },
+          {
+            "name": "trade_range",
+            "selector": "[data-testid='trade-range']"
+          }
+        ],
+        "example_urls": [
+          "https://stockx.com/air-jordan-1-retro-high-og-chicago-2015",
+          "https://stockx.com/nike-dunk-low-panda"
+        ],
+        "recommended_settings": {
+          "run_frequency": "Daily",
+          "max_pages": 1,
+          "wait_time": "2 seconds",
+          "retry_attempts": 3,
+          "output_format": "JSON"
+        }
+      }
+    },
+    "goat_product_scraper": {
+      "name": "GOAT Product Scraper",
+      "description": "Scrapes GOAT product pages for sneaker marketplace data",
+      "setup_guide": {
+        "target_sites": [
+          "goat.com"
+        ],
+        "data_fields_to_extract": [
+          {
+            "name": "product_name",
+            "selector": "h1[class*='ProductDetailsHeader']"
+          },
+          {
+            "name": "lowest_price",
+            "selector": "[data-qa='lowest-price']"
+          },
+          {
+            "name": "images",
+            "selector": "img[class*='ProductImage']",
+            "attribute": "src",
+            "multiple": true
+          },
+          {
+            "name": "brand",
+            "selector": "[data-qa='brand-name']"
+          },
+          {
+            "name": "retail_price",
+            "selector": "[data-qa='retail-price']"
+          },
+          {
+            "name": "release_date",
+            "selector": "[data-qa='release-date']"
+          },
+          {
+            "name": "condition_guide",
+            "selector": "[data-qa='condition-guide']"
+          }
+        ],
+        "example_urls": [
+          "https://www.goat.com/sneakers/air-jordan-1-retro-high-og-chicago-555088-101",
+          "https://www.goat.com/sneakers/nike-dunk-low-white-black-dd1391-100"
+        ],
+        "recommended_settings": {
+          "run_frequency": "Daily",
+          "max_pages": 1,
+          "wait_time": "2 seconds",
+          "retry_attempts": 3,
+          "output_format": "JSON"
+        }
+      }
+    }
+  }
+}

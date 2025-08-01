@@ -61,15 +61,23 @@ class GoogleDriveManager:
             logger.error(f"Error creating folder '{folder_name}': {str(e)}")
             return None
     
-    def upload_image(self, file_path, file_name, folder_id=None):
-        """Upload an image to Google Drive"""
+    def upload_image(self, file_path, file_name, folder_name=None):
+        """Upload an image to Google Drive with organized folder structure"""
         try:
-            if folder_id is None:
-                folder_id = self.folder_id
+            # Get or create the target folder
+            target_folder_id = self.folder_id
+            if folder_name:
+                target_folder_id = self.get_or_create_folder(folder_name, self.folder_id)
+            
+            # Check if file already exists
+            existing_file = self.find_file_by_name(file_name, target_folder_id)
+            if existing_file:
+                logger.info(f"File '{file_name}' already exists, skipping upload")
+                return existing_file['id']
             
             file_metadata = {
                 'name': file_name,
-                'parents': [folder_id] if folder_id else []
+                'parents': [target_folder_id] if target_folder_id else []
             }
             
             media = MediaFileUpload(file_path, resumable=True)
@@ -80,20 +88,72 @@ class GoogleDriveManager:
             ).execute()
             
             # Make file publicly viewable
-            self.service.permissions().create(
-                fileId=file.get('id'),
-                body={'role': 'reader', 'type': 'anyone'}
-            ).execute()
+            try:
+                self.service.permissions().create(
+                    fileId=file.get('id'),
+                    body={'role': 'reader', 'type': 'anyone'}
+                ).execute()
+            except Exception as perm_error:
+                logger.warning(f"Could not set public permissions for {file_name}: {str(perm_error)}")
             
             logger.info(f"Uploaded '{file_name}' with ID: {file.get('id')}")
-            return {
-                'id': file.get('id'),
-                'web_view_link': file.get('webViewLink'),
-                'web_content_link': file.get('webContentLink')
-            }
+            return file.get('id')
         
         except Exception as e:
             logger.error(f"Error uploading '{file_name}': {str(e)}")
+            return None
+    
+    def get_or_create_folder(self, folder_name, parent_folder_id=None):
+        """Get existing folder or create new one"""
+        try:
+            # Check if folder already exists
+            existing_folder = self.find_folder_by_name(folder_name, parent_folder_id)
+            if existing_folder:
+                return existing_folder['id']
+            
+            # Create new folder
+            return self.create_folder(folder_name, parent_folder_id)
+        
+        except Exception as e:
+            logger.error(f"Error getting/creating folder '{folder_name}': {str(e)}")
+            return parent_folder_id
+    
+    def find_folder_by_name(self, folder_name, parent_folder_id=None):
+        """Find folder by name in parent directory"""
+        try:
+            query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            if parent_folder_id:
+                query += f" and '{parent_folder_id}' in parents"
+            
+            results = self.service.files().list(
+                q=query,
+                fields="files(id, name)"
+            ).execute()
+            
+            files = results.get('files', [])
+            return files[0] if files else None
+        
+        except Exception as e:
+            logger.error(f"Error finding folder '{folder_name}': {str(e)}")
+            return None
+    
+    def find_file_by_name(self, file_name, parent_folder_id=None):
+        """Find file by name in parent directory"""
+        try:
+            query = f"name='{file_name}' and trashed=false"
+            if parent_folder_id:
+                query += f" and '{parent_folder_id}' in parents"
+            
+            results = self.service.files().list(
+                q=query,
+                fields="files(id, name)"
+            ).execute()
+            
+            files = results.get('files', [])
+            return files[0] if files else None
+        
+        except Exception as e:
+            logger.error(f"Error finding file '{file_name}': {str(e)}")
             return None
     
     def upload_data_file(self, file_path, file_name, folder_id=None):
@@ -152,3 +212,46 @@ class GoogleDriveManager:
         except Exception as e:
             logger.error(f"Error deleting file {file_id}: {str(e)}")
             return False
+    
+    def upload_file(self, file_path, file_name, folder_name=None):
+        """Upload a file to Google Drive with organized folder structure"""
+        try:
+            # Get or create the target folder
+            target_folder_id = self.folder_id
+            if folder_name:
+                target_folder_id = self.get_or_create_folder(folder_name, self.folder_id)
+            
+            # Check if file already exists
+            existing_file = self.find_file_by_name(file_name, target_folder_id)
+            if existing_file:
+                logger.info(f"File '{file_name}' already exists, skipping upload")
+                return existing_file['id']
+            
+            file_metadata = {
+                'name': file_name,
+                'parents': [target_folder_id] if target_folder_id else []
+            }
+            
+            media = MediaFileUpload(file_path, resumable=True)
+            file = self.service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id,webViewLink,webContentLink'
+            ).execute()
+            
+            # Make file publicly viewable for images
+            if file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
+                try:
+                    self.service.permissions().create(
+                        fileId=file.get('id'),
+                        body={'role': 'reader', 'type': 'anyone'}
+                    ).execute()
+                except Exception as perm_error:
+                    logger.warning(f"Could not set public permissions for {file_name}: {str(perm_error)}")
+            
+            logger.info(f"Uploaded '{file_name}' with ID: {file.get('id')}")
+            return file.get('id')
+        
+        except Exception as e:
+            logger.error(f"Error uploading '{file_name}': {str(e)}")
+            return None

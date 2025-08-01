@@ -1,17 +1,21 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, and_
+from sqlalchemy import create_engine, and_, func, desc
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
 from datetime import datetime
 import logging
+import asyncio
 
-from models import Base, Sneaker, SneakerImage, PriceHistory
+from models import Base, Sneaker, SneakerImage, PriceHistory, ScrapingLog
 from config import Config
 from scraper_manager import ScraperManager
+
+# Import the enhanced scraper
+from enhanced_scraper import EnhancedSneakerScraper
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +27,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
 # FastAPI app
-app = FastAPI(title="Sneaker Data API", version="1.0.0")
+app = FastAPI(
+    title="SoleID Sneaker API",
+    description="API for sneaker identification and price tracking",
+    version="1.0.0"
+)
 
 # CORS middleware
 app.add_middleware(
@@ -51,10 +59,8 @@ class SneakerResponse(BaseModel):
     colorway: Optional[str]
     sku: Optional[str]
     retail_price: Optional[float]
-    release_date: Optional[datetime]
-    description: Optional[str]
-    images: List[dict] = []
-    current_prices: List[dict] = []
+    current_price: Optional[float]
+    image_url: Optional[str]
     
     class Config:
         from_attributes = True
@@ -64,11 +70,30 @@ class SearchRequest(BaseModel):
     brand: Optional[str] = None
     min_price: Optional[float] = None
     max_price: Optional[float] = None
-    platform: Optional[str] = None
 
 class ScrapeRequest(BaseModel):
     search_terms: List[str]
-    platforms: List[str] = ["stockx", "goat", "ebay"]
+    platforms: Optional[List[str]] = ["stockx", "ebay"]
+
+class DatabaseBuildRequest(BaseModel):
+    max_per_sneaker: Optional[int] = 30
+    custom_sneakers: Optional[List[str]] = None
+
+class DatabaseBuildStatus(BaseModel):
+    status: str
+    progress: Optional[str] = None
+    total_items: Optional[int] = None
+    total_images: Optional[int] = None
+    error: Optional[str] = None
+
+# Global variable to track database building status
+database_build_status = {
+    "status": "idle",
+    "progress": None,
+    "total_items": 0,
+    "total_images": 0,
+    "error": None
+}
 
 # Initialize scraper manager
 scraper_manager = ScraperManager()
@@ -232,6 +257,122 @@ async def trigger_scrape(
         "search_terms": request.search_terms,
         "platforms": request.platforms
     }
+
+@app.post("/api/build-database", response_model=dict)
+async def build_database(
+    request: DatabaseBuildRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Start building the sneaker database with images and price data"""
+    global database_build_status
+    
+    if database_build_status["status"] == "running":
+        raise HTTPException(status_code=400, detail="Database building is already in progress")
+    
+    # Reset status
+    database_build_status = {
+        "status": "running",
+        "progress": "Starting database build...",
+        "total_items": 0,
+        "total_images": 0,
+        "error": None
+    }
+    
+    # Start background task
+    background_tasks.add_task(
+        run_database_build,
+        request.max_per_sneaker,
+        request.custom_sneakers
+    )
+    
+    return {
+        "message": "Database building started",
+        "status": "running",
+        "estimated_time": "30-60 minutes"
+    }
+
+@app.get("/api/build-status", response_model=DatabaseBuildStatus)
+async def get_build_status():
+    """Get the current status of database building"""
+    return DatabaseBuildStatus(**database_build_status)
+
+@app.get("/api/database-stats")
+async def get_database_stats(db: Session = Depends(get_db)):
+    """Get current database statistics"""
+    try:
+        total_sneakers = db.query(Sneaker).count()
+        total_images = db.query(SneakerImage).count()
+        total_prices = db.query(PriceHistory).count()
+        
+        # Get brand distribution
+        brand_stats = db.query(
+            Sneaker.brand,
+            func.count(Sneaker.id).label('count')
+        ).group_by(Sneaker.brand).all()
+        
+        # Get recent scraping logs
+        recent_logs = db.query(ScrapingLog).order_by(
+            desc(ScrapingLog.created_at)
+        ).limit(5).all()
+        
+        return {
+            "total_sneakers": total_sneakers,
+            "total_images": total_images,
+            "total_prices": total_prices,
+            "brand_distribution": [{"brand": brand, "count": count} for brand, count in brand_stats],
+            "recent_scraping_logs": [
+                {
+                    "platform": log.platform,
+                    "status": log.status,
+                    "items_scraped": log.items_scraped,
+                    "created_at": log.created_at
+                } for log in recent_logs
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting database stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving database statistics")
+
+async def run_database_build(max_per_sneaker: int, custom_sneakers: Optional[List[str]]):
+    """Background task to run database building"""
+    global database_build_status
+    
+    try:
+        database_build_status["progress"] = "Initializing scraper..."
+        
+        # Create enhanced scraper
+        scraper = EnhancedSneakerScraper()
+        
+        # Get sneaker list
+        if custom_sneakers:
+            sneaker_list = custom_sneakers
+        else:
+            sneaker_list = scraper.get_popular_sneakers()
+        
+        database_build_status["progress"] = f"Starting to scrape {len(sneaker_list)} sneaker models..."
+        
+        # Build database
+        results = scraper.build_sneaker_database(sneaker_list, max_per_sneaker)
+        
+        # Update status
+        database_build_status.update({
+            "status": "completed",
+            "progress": "Database building completed successfully!",
+            "total_items": results["total_items"],
+            "total_images": results["total_images"],
+            "error": None
+        })
+        
+        logger.info(f"Database build completed: {results}")
+        
+    except Exception as e:
+        logger.error(f"Error in database building: {str(e)}")
+        database_build_status.update({
+            "status": "error",
+            "progress": None,
+            "error": str(e)
+        })
 
 @app.get("/api/stats")
 async def get_stats(db: Session = Depends(get_db)):
