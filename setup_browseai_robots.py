@@ -197,7 +197,7 @@ class BrowseAIIntegration:
 # Example usage:
 if __name__ == "__main__":
     # Initialize with your BrowseAI API key
-    api_key = "your_browseai_api_key_here"
+    api_key = os.getenv('BROWSEAI_API_KEY', 'your_browseai_api_key_here')
     browse_ai = BrowseAIIntegration(api_key)
     
     # Example robot IDs (replace with your actual robot IDs)

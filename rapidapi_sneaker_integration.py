@@ -128,7 +128,9 @@ class RapidAPISneakerIntegration:
     def setup_apis(self):
         """Setup API configurations"""
         # RapidAPI configuration
-        self.rapidapi_key = "ea9e679331msha2742f4c3daa0c5p1925fcjsn69b27669a85c"
+        self.rapidapi_key = os.getenv('RAPIDAPI_KEY')
+        if not self.rapidapi_key:
+            raise ValueError("RAPIDAPI_KEY environment variable not set!")
         self.rapidapi_host = "the-sneaker-database.p.rapidapi.com"
         
         self.headers = {
